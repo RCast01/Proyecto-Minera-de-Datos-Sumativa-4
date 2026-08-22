@@ -1,4 +1,4 @@
-Modelo |	Métricas utilizadas	Objetivo analítico	Desempeño	Criterio de comparación
-Regresión lineal múltiple	MAE, RMSE, R²	Predecir shipping_delay_days	MAE = 1,606; RMSE = 2,010; R² = 0,534	Menor MAE/RMSE y mayor R²
-Clasificación	Pendiente	Pendiente	Pendiente	Pendiente
+Modelo | Métricas utilizadas |	Objetivo analítico |	Desempeño	| Criterio de comparación
+Regresión lineal múltiple |	MAE, RMSE, R²	| Predecir shipping_delay_days |	MAE = 1,606; RMSE = 2,010; R² = 0,534	| Menor MAE/RMSE y mayor R²
+Clasificación |	Accuracy, Kappa	| Predecir route_status |	Accuracy = 0,746; kappa = 0.437 |	74.6% rutas clasif. correctamente, moderado acuerdo entre pred. y realidad (kappa)
 Agrupamiento	Pendiente	Pendiente	Pendiente	Pendiente
