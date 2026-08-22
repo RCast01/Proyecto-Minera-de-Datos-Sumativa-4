@@ -1,0 +1,267 @@
+---
+title: "modelo agrupamiento"
+output:
+  pdf_document: default
+  html_document: default
+date: "2026-08-22"
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r}
+# Minería de datos
+# Modelo de agrupamiento K-means
+
+# Importación de librerías
+library(tidyverse)
+library(cluster)
+library(factoextra)
+
+# Importación del dataset
+df <- read.csv(
+  "weekly_route_operations.csv",
+  sep = ",",
+  header = TRUE
+) %>%
+  drop_na()
+
+# Selección de 6 variables numéricas
+# utilizadas para realizar el agrupamiento
+vars_num <- c(
+  "trade_volume_tonnes",
+  "freight_cost_usd",
+  "container_availability_index",
+  "port_congestion_index",
+  "weather_disruption_score",
+  "carbon_emissions_tonnes"
+)
+
+df_cluster <- df[, vars_num]
+
+# Verificación de observaciones utilizadas
+nrow(df_cluster)
+
+# Estandarización de variables
+# Se utiliza debido a que K-means calcula distancias
+# y las variables presentan diferentes escalas.
+df_scaled <- scale(df_cluster)
+```
+```{r}
+# Entrenamiento de modelos K-means
+# Se evalúan inicialmente configuraciones K = 3 y K = 4.
+set.seed(42)
+
+# Modelo K = 3
+k3 <- kmeans(
+  df_scaled,
+  centers = 3,
+  nstart = 25,
+  iter.max = 100,
+  algorithm = "Lloyd"
+)
+
+# Modelo K = 4
+k4 <- kmeans(
+  df_scaled,
+  centers = 4,
+  nstart = 25,
+  iter.max = 100,
+  algorithm = "Lloyd"
+)
+
+# Selección de muestra para evaluación
+# El cálculo de todas las distancias del dataset completo
+# requiere un alto consumo de memoria.
+# Por este motivo se utiliza una muestra aleatoria de hasta
+# 5.000 observaciones solamente para evaluar los modelos.
+set.seed(42)
+
+tamano_muestra <- min(5000, nrow(df_scaled))
+
+indices_muestra <- sample(
+  seq_len(nrow(df_scaled)),
+  size = tamano_muestra,
+  replace = FALSE
+)
+
+df_sample <- df_scaled[indices_muestra, ]
+
+# Verificación de observaciones utilizadas para evaluación
+tamano_muestra
+
+# Cálculo del coeficiente de silueta para K = 3
+sil3 <- silhouette(
+  k3$cluster[indices_muestra],
+  dist(df_sample)
+)
+
+# Cálculo del coeficiente de silueta para K = 4
+sil4 <- silhouette(
+  k4$cluster[indices_muestra],
+  dist(df_sample)
+)
+
+# Obtención del promedio del coeficiente de silueta
+silhouette_k3 <- summary(sil3)$avg.width
+silhouette_k4 <- summary(sil4)$avg.width
+
+# Comparación de resultados
+cat("K = 3\n")
+cat("SSE:", k3$tot.withinss, "\n")
+cat("Silueta:", silhouette_k3, "\n\n")
+
+cat("K = 4\n")
+cat("SSE:", k4$tot.withinss, "\n")
+cat("Silueta:", silhouette_k4, "\n")
+```
+```{r}
+# Selección del modelo final
+# Se utiliza como criterio principal el mayor
+# coeficiente promedio de silueta.
+
+if (silhouette_k3 > silhouette_k4) {
+  
+  modelo_final <- k3
+  k_final <- 3
+  silueta_final <- silhouette_k3
+  
+} else {
+  
+  modelo_final <- k4
+  k_final <- 4
+  silueta_final <- silhouette_k4
+}
+
+# Resultado de selección
+cat("Modelo seleccionado: K =", k_final, "\n")
+cat("Coeficiente de silueta:", silueta_final, "\n")
+
+# El modelo con mayor coeficiente de silueta se selecciona
+# como modelo final entre las configuraciones evaluadas.
+```
+```{r}
+# Método del Codo
+# Se evalúan configuraciones entre K = 1 y K = 10
+# utilizando la muestra para reducir el consumo de memoria.
+
+grafico_codo <- fviz_nbclust(
+  df_sample,
+  kmeans,
+  method = "wss",
+  k.max = 10,
+  nstart = 25
+) +
+  labs(
+    title = "Método del Codo",
+    x = "Número de clusters (K)",
+    y = "Suma de cuadrados intra-cluster (WSS)"
+  )
+
+print(grafico_codo)
+
+# El método del codo permite observar en qué punto
+# el aumento del número de clusters deja de producir
+# una reducción importante del WSS.
+```
+```{r}
+# Visualización del modelo final
+# Se utiliza PCA para reducir las 6 variables originales
+# a dos componentes principales y representar los clusters
+# en un plano bidimensional.
+
+pca_final <- prcomp(
+  df_sample,
+  center = FALSE,
+  scale. = FALSE
+)
+
+# Creación de dataframe para visualización
+df_plot <- data.frame(
+  PC1 = pca_final$x[, 1],
+  PC2 = pca_final$x[, 2],
+  Cluster = factor(
+    modelo_final$cluster[indices_muestra]
+  )
+)
+
+# Cálculo de centros visuales de cada cluster
+centros_cluster <- df_plot %>%
+  group_by(Cluster) %>%
+  summarise(
+    PC1 = mean(PC1),
+    PC2 = mean(PC2)
+  )
+
+# Gráfico de clusters
+grafico_cluster <- ggplot(
+  df_plot,
+  aes(
+    x = PC1,
+    y = PC2,
+    color = Cluster
+  )
+) +
+  geom_point(
+    alpha = 0.5,
+    size = 1.5
+  ) +
+  stat_ellipse(
+    aes(group = Cluster),
+    type = "norm",
+    linewidth = 0.8
+  ) +
+  geom_point(
+    data = centros_cluster,
+    aes(
+      x = PC1,
+      y = PC2,
+      color = Cluster
+    ),
+    size = 5,
+    shape = 8
+  ) +
+  labs(
+    title = paste(
+      "Modelo de Agrupamiento K-means (K =",
+      k_final,
+      ")"
+    ),
+    subtitle = "Visualización mediante Análisis de Componentes Principales (PCA)",
+    x = "Componente Principal 1",
+    y = "Componente Principal 2",
+    color = "Cluster"
+  ) +
+  theme_minimal()
+
+print(grafico_cluster)
+
+# PCA se utiliza únicamente para representar gráficamente
+# los grupos obtenidos por K-means.
+# El modelo fue entrenado utilizando las 6 variables originales
+# previamente estandarizadas.
+```
+```{r}
+# Caracterización de los clusters
+# Se incorpora a cada observación el cluster asignado
+# por el modelo final.
+
+df_perfiles <- df_cluster %>%
+  mutate(
+    Cluster = factor(modelo_final$cluster)
+  )
+
+# Cálculo del promedio de cada variable por cluster
+perfil_clusters <- df_perfiles %>%
+  group_by(Cluster) %>%
+  summarise(
+    across(
+      all_of(vars_num),
+      ~ mean(.x, na.rm = TRUE)
+    )
+  )
+
+# Resultados
+perfil_clusters
+```
