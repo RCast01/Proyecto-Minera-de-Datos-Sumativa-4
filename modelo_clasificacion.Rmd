@@ -1,0 +1,165 @@
+---
+title: "Modelo de Clasificacion"
+---
+```{r}
+#Instalar librerias
+library(caret)
+library(randomForest)
+library(ggplot2)
+
+```
+
+```{r}
+#Incorporamos seed aleatorio para reproducibilidad
+set.seed(2026)
+```
+
+```{r}
+#Cargar base de datos
+datos <- read.csv("weekly_route_operations.csv", stringsAsFactors = FALSE)
+```
+
+```{r}
+#Revision de caracteristicas y estructura de dataset
+cat("Dimensiones del dataset (filas, columnas):", dim(datos), "\n")
+str(datos)
+```
+
+```{r}
+# Se define la variable route_status como la variable a predecir, se transforma 
+# de texto a factor, para su representacion como variable categorica
+datos$route_status <- factor(datos$route_status,
+                              levels = c("Normal", "Delayed", "Disrupted"))
+
+#Revisar cuantas observaciones tiene cada categoria
+cat("\nDistribucion de la variable objetivo (route_status):\n")
+print(table(datos$route_status))
+print(round(prop.table(table(datos$route_status)) * 100, 1))
+
+#Se excluye de las variables predictoras"shipping_delay_days"
+# (dias de retraso), ya que Esto "route_status" se define casi
+# directamente a partir de esta variable (Normal < 5 dias, Delayed 5-12
+# dias, Disrupted > 12 dias). Si la incluyeramos, el modelo no estaria
+# "aprendiendo a predecir", sino simplemente leyendo la respuesta de forma
+# indirecta.
+
+#El resto de variables se utilizan como variables predictoras
+predictores <- c("trade_volume_tonnes",
+                  "container_availability_index",
+                  "port_congestion_index",
+                  "fuel_cost_index",
+                  "commodity_price_index",
+                  "weather_disruption_score",
+                  "geopolitical_risk_score",
+                  "carbon_emissions_tonnes")
+
+
+# Creamos una tabla reducida solo con las variables predictoras + la
+# variable objetivo.
+datos_clas <- datos[, c(predictores, "route_status")]
+```
+
+```{r}
+#Crear particion de dataset para entrenamiento (70%) y prueba (30%)
+indices_train <- createDataPartition(datos_clas$route_status,
+                                      p = 0.7, list = FALSE)
+
+train <- datos_clas[indices_train, ]    # 70% de los datos -> entrenamiento
+test  <- datos_clas[-indices_train, ]   # 30% restante -> prueba
+
+cat("\nObservaciones en entrenamiento:", nrow(train), "\n")
+cat("Observaciones en prueba:", nrow(test), "\n")
+```
+
+```{r}
+#Entrenar modelo de clasificacion (RF)
+modelo_rf <- randomForest(
+  route_status ~ .,     # predecir route_status usando el resto de columnas
+  data = train,
+  ntree = 300,          #Numero de arboles de decision creados
+  mtry = 4,             #Numero de variables candidatas evaluadas en cada division de cada arbol.
+  importance = TRUE)
+cat("\n=== Resumen del modelo Random Forest entrenado ===\n")
+print(modelo_rf)
+```
+
+```{r}
+#Con modelo entrenado, se realiza prediccion de las rutas en conjunto de prueba
+predicciones <- predict(modelo_rf, test)
+
+niveles_ref  <- levels(test$route_status)
+predicciones <- factor(predicciones, levels = niveles_ref)
+test$route_status <- factor(test$route_status, levels = niveles_ref)
+```
+
+```{r}
+#Crear matriz de confusion y metricas solicitadas, en este caso Acurracy y Kappa
+
+matriz_confusion <- confusionMatrix(predicciones, test$route_status)
+
+cat("\n=== MATRIZ DE CONFUSION (conjunto de prueba) ===\n")
+print(matriz_confusion)
+
+accuracy_valor <- matriz_confusion$overall["Accuracy"]
+kappa_valor    <- matriz_confusion$overall["Kappa"]
+
+cat("Valor obtenido:", round(accuracy_valor, 3), "\n")
+cat("Valor obtenido:", round(kappa_valor, 3), "\n")
+```
+
+```{r}
+#Graficar heatmap de resultados matriz de confusion
+
+tabla_cm <- as.data.frame(matriz_confusion$table)
+names(tabla_cm) <- c("Prediccion", "Real", "Frecuencia")
+
+tabla_cm$Porcentaje <- ave(tabla_cm$Frecuencia, tabla_cm$Real,
+                            FUN = function(x) round(100 * x / sum(x), 1))
+
+# Texto que se muestra dentro de cada celda: cantidad de casos y porcentaje
+tabla_cm$Etiqueta <- paste0(tabla_cm$Frecuencia, "\n(", tabla_cm$Porcentaje, "%)")
+
+grafico_cm <- ggplot(tabla_cm, aes(x = Real, y = Prediccion, fill = Frecuencia)) +
+  geom_tile(color = "white", linewidth = 1) +
+  geom_text(aes(label = Etiqueta), size = 4.2, fontface = "bold") +
+  scale_fill_gradient(low = "#FDE0DD", high = "#C51B8A", name = "N de rutas") +
+  scale_x_discrete(position = "top", limits = niveles_ref) +
+  scale_y_discrete(limits = rev(niveles_ref)) +
+  labs(
+    title = "Matriz de Confusion - Clasificacion (Random Forest)",
+    subtitle = "Filas = estado predicho por el modelo | Columnas = estado real de la ruta",
+    x = "Estado real de la ruta",
+    y = "Estado predicho por el modelo"
+  ) +
+  theme_minimal(base_size = 13) +
+  theme(
+    plot.title = element_text(face = "bold", hjust = 0.5, size = 13),
+    plot.subtitle = element_text(hjust = 0.5, size = 10, color = "gray30"),
+    plot.margin = ggplot2::margin(t = 15, r = 15, b = 10, l = 10),
+    panel.grid = element_blank(),
+    legend.position = "right"
+  )
+
+#Guardar imagen de visualizacion heatmap
+dir.create("figures", showWarnings = FALSE)
+ggsave("figures/matriz_confusion_heatmap.png", grafico_cm,
+       width = 7.5, height = 6, dpi = 130)
+
+cat("Grafico guardado en: figures/matriz_confusion_heatmap.png\n")
+```
+
+```{r}
+#Graficar relevancia de cada de las variables predictoras
+
+dir.create("figures", showWarnings = FALSE)
+
+png("figures/importancia_variables_clasificacion.png",
+    width = 900, height = 700, res = 120)
+varImpPlot(modelo_rf,
+           main = "Importancia de variables - Clasificacion (Random Forest)",
+           n.var = 8)
+dev.off()
+
+cat("\nGrafico guardado en: figures/importancia_variables_clasificacion.png\n")
+```
+
