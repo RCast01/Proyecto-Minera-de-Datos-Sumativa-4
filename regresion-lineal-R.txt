@@ -1,0 +1,297 @@
+
+```{r}
+# Minería de datos
+# Regresión Lineal Múltiple
+```
+
+
+
+```{r}
+# Importación de librerías
+library(car)
+library(ggplot2)
+library(caret)
+```
+
+```{r}
+# Importacion del dataset
+df <- read.csv(
+  "weekly_route_operations.csv",
+  sep = ",",
+  header = TRUE
+)
+```
+
+```{r}
+# Verificar que el dataset fue cargado correctamente
+head(df)
+```
+
+```{r}
+# Selección inicial de 9 variables predictoras
+# Variable objetivo: shipping_delay_days
+vars_reg <- c(
+  "trade_volume_tonnes",
+  "freight_cost_usd",
+  "container_availability_index",
+  "port_congestion_index",
+  "fuel_cost_index",
+  "commodity_price_index",
+  "weather_disruption_score",
+  "geopolitical_risk_score",
+  "carbon_emissions_tonnes"
+)
+
+# Verificación de variables
+vars_reg
+```
+
+```{r}
+# División en entrenamiento y prueba 80%, 20%
+set.seed(42)
+trainIndex <- createDataPartition(
+  df$shipping_delay_days,
+  p = 0.8,
+  list = FALSE
+)
+
+trainData <- df[trainIndex, ]
+testData  <- df[-trainIndex, ]
+```
+
+```{r}
+# Verificación de observaciones total y subconjunto
+nrow(df)
+nrow(trainData)
+nrow(testData)
+```
+
+```{r}
+# Chequeo de porcentajes asignados
+nrow(trainData) / nrow(df) * 100
+nrow(testData) / nrow(df) * 100
+```
+
+```{r}
+# Matriz de correlación entre variables predictoras
+# Cálculo de matriz Pearson entre variables independientes
+train_reg <- trainData[, vars_reg]
+matriz_cor <- cor(
+  train_reg,
+  use = "complete.obs",
+  method = "pearson"
+)
+# Redondeo a 3 decimales
+round(matriz_cor, 3)
+```
+
+```{r}
+# Se presta especial atención a correlaciones |r| >= 0.80
+# por alta relación lineal entre variables predictoras
+```
+
+```{r}
+# Modelo inicial de regresión lineal múltiple
+modelo_inicial <- lm(
+  shipping_delay_days ~
+    trade_volume_tonnes +
+    freight_cost_usd +
+    container_availability_index +
+    port_congestion_index +
+    fuel_cost_index +
+    commodity_price_index +
+    weather_disruption_score +
+    geopolitical_risk_score +
+    carbon_emissions_tonnes,
+  data = trainData
+)
+```
+
+```{r}
+# Resumen estadístico 
+summary(modelo_inicial)
+```
+
+```{r}
+# Evaluación de multicolinealidad
+# Cálculo VIF
+valores_vif <- vif(modelo_inicial)
+valores_vif
+```
+
+```{r}
+# VIF muy elevados para:
+# container_availability_index: 39.76
+# geopolitical_risk_score:     39.59
+# con la correlación de r = -0.986 observada previamente,
+# estos resultados evidencian multicolinealidad severa entre ambas.
+# Por este motivo se evalúa retirar una de las dos variables.
+# fuel_cost_index (p = 0.155) y
+# commodity_price_index (p = 0.982) no resultaron significativos
+# en este modelo inicial aún no lo eliminamos,
+# ya que primero se corregirá el problema de multicolinealidad.
+```
+
+
+```{r}
+# Corrección de multicolinealidad
+# Se elimina container_availilability_index
+modelo_2 <- lm(
+  shipping_delay_days ~
+    trade_volume_tonnes +
+    freight_cost_usd +
+    port_congestion_index +
+    fuel_cost_index +
+    commodity_price_index +
+    weather_disruption_score +
+    geopolitical_risk_score +
+    carbon_emissions_tonnes,
+  data = trainData
+)
+```
+
+```{r}
+# Resumen estadístico 
+summary(modelo_2)
+```
+
+```{r}
+# Evaluación de multicolinealidad
+vif(modelo_2)
+```
+
+```{r}
+# Se redujo VIF de geopolitical_risk_score
+# de 39.59 a 1.16, corrigiendo la multicolinealidad severa.
+# El R² disminuyó sólo de 0.5299 a 0.5282, por lo que la
+# capacidad explicativa del modelo prácticamente se mantuvo.
+# commodity_price_index continuó siendo no significativa
+# (p = 0.7548), por lo que se evalúa su eliminación.
+# fuel_cost_index también presentó p > 0.05 (p = 0.0925),
+# pero se conserva temporalmente para reevaluar su significancia
+# después de retirar commodity_price_index.
+```
+
+```{r}
+# Modelo final de regresión lineal múltiple
+# Se elimina commodity_price_index
+modelo_3 <- lm(
+  shipping_delay_days ~
+    trade_volume_tonnes +
+    freight_cost_usd +
+    port_congestion_index +
+    fuel_cost_index +
+    weather_disruption_score +
+    geopolitical_risk_score +
+    carbon_emissions_tonnes,
+  data = trainData
+)
+```
+
+
+```{r}
+# Resumen estadístico
+summary(modelo_3)
+```
+
+```{r}
+# Todos los predictores presentan
+# significancia estadística (p < 0.05).
+# Fuel_cost_index pasó de p = 0.0925
+# a p = 0.00442 después de eliminar commodity_price_index,
+# por lo que se mantiene como predictor.
+# El modelo obtuvo un R² de 0.5282 y un R² ajustado de 0.5281.
+```
+
+```{r}
+# Evaluación de multicolinealidad
+vif(modelo_3)
+```
+
+```{r}
+# Los VIF obtenidos muestran que ya no existe la
+# multicolinealidad severa detectada al inicio
+```
+
+```{r}
+# Predicciones
+# Se utiliza el modelo final para predecir shipping_delay_days
+# sobre el 20 % de los datos reservados para prueba.
+predicciones <- predict(modelo_3, newdata = testData)
+```
+
+```{r}
+# Verificación de cantidad generada
+length(predicciones)
+```
+
+```{r}
+# Extracción de valores reales 
+reales <- testData$shipping_delay_days
+```
+
+```{r}
+# Comparación reales-predicción
+head(data.frame(
+  Real = reales,
+  Predicho = predicciones
+))
+```
+
+```{r}
+# Evaluación de desempeño
+MAE <- mean(abs(reales - predicciones))
+RMSE <- sqrt(mean((reales - predicciones)^2))
+R2 <- 1 - sum((reales - predicciones)^2) /
+          sum((reales - mean(reales))^2)
+
+# Resultados.
+MAE
+RMSE
+R2
+
+```
+
+```{r}
+# El modelo presenta un error absoluto promedio de aproximadamente
+# 1.61 días y explica cerca del 53.4 % de la variabilidad de los
+# retrasos observados en el conjunto de prueba.
+```
+
+```{r}
+# Comparación reales-predichos
+resultados_test <- data.frame(
+  Real = reales,
+  Predicho = predicciones
+)
+
+# Revisión
+head(resultados_test)
+```
+
+
+```{r}
+# Gráfico de dispersión
+ggplot(resultados_test, aes(x = Real, y = Predicho)) +
+  geom_point(alpha = 0.3) +
+  geom_abline(
+    intercept = 0,
+    slope = 1,
+    color = "red",
+    linewidth = 1
+  ) +
+  labs(
+    title = "Valores reales vs. valores predichos",
+    subtitle = "Regresión lineal múltiple - conjunto de prueba",
+    x = "Retraso real (días)",
+    y = "Retraso predicho (días)"
+  ) +
+  theme_minimal()
+```
+
+```{r}
+# La línea roja representa una predicción perfecta (y = ŷ).
+# Cuanto más próximo esté un punto a esta línea
+# menor es el error de predicción.
+```
+
