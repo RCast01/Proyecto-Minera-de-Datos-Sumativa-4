@@ -1,17 +1,17 @@
 ================================================================================
-ANÁLISIS EXPLORATORIO DE DATOS DE DATASET
+EVALUACIÓN DE MODELOS DE DATASET
 "weekly_route_operations.csv"
 =============================
 
 DESCRIPCIÓN
 
-Este proyecto corresponde al desarrollo de un Análisis Exploratorio de Datos aplicado al dataset "weekly_route_operations.csv", el cual contiene información relacionada con operaciones logísticas y transporte marítimo. El análisis contempla la exploración de variables, evaluación de la calidad de los datos, identificación de valores atípicos, análisis de correlación y preparación del conjunto de datos para etapas posteriores de modelamiento.
+Este proyecto corresponde al desarrollo de evaluación y ejecución de modelos de aprendizaje supervisado y no supervisado utilizando dataset "weekly_route_operations.csv", el cual contiene información relacionada con operaciones logísticas y transporte marítimo. El análisis contempla la exploración de variables, evaluación de distintos tipos de modelo de aprendizaje automático, uso de métricas para análisis de desarrollo de modelos y analisis de resultados de modelos.
 
 CARACTERÍSTICAS PRINCIPALES
 
 * Análisis exploratorio de variables numéricas y categóricas.
-* Evaluación de la calidad del conjunto de datos mediante detección de valores faltantes y datos atípicos.
-* Análisis de correlación entre la variable objetivo y las variables predictoras mediante el coeficiente de correlación de Pearson.
+* Evaluación y ejecución de modelos de aprendizaje supervisado y no supervisado.
+* Análisis de desarrollo de cada uno de los modelos y sus resultados agregando metricas de interés.
 
 REQUISITOS PREVIOS / DEPENDENCIAS
 
@@ -39,6 +39,7 @@ Para ejecutar correctamente el proyecto se requiere:
   * tidyr
   * moments
   * gt
+  * randomforest
 
 INSTALACIÓN Y CONFIGURACIÓN
 
